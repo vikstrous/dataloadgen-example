@@ -14,7 +14,7 @@ func Get(ctx context.Context) *Loaders {
 	return ctx.Value(ctxKey{}).(*Loaders)
 }
 
-// Loaders provide access for loading various objects from the underlying object storage while batching concurrent requests and caching responses.
+// Loaders provide access for loading various objects from the underlying object's storage system while batching concurrent requests and caching responses.
 type Loaders struct {
 	User *dataloadgen.Loader[string, *model.User]
 }
