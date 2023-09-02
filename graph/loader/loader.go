@@ -9,8 +9,6 @@ import (
 	"github.com/vikstrous/dataloadgen-example/graph/storage"
 )
 
-type ctxKey struct{}
-
 type Loaders struct {
 	User *dataloadgen.Loader[string, *model.User]
 }
@@ -30,6 +28,8 @@ func Middleware(userStorage *storage.UserStorage, next http.Handler) http.Handle
 func Get(ctx context.Context) *Loaders {
 	return ctx.Value(ctxKey{}).(*Loaders)
 }
+
+type ctxKey struct{}
 
 func newLoaders(userStorage *storage.UserStorage) *Loaders {
 	userFetcher := &userFetcher{
