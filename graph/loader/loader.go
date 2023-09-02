@@ -9,6 +9,12 @@ import (
 	"github.com/vikstrous/dataloadgen-example/graph/storage"
 )
 
+// Get returns the Loaders bundle from the context. It must be used only in graphql resolvers where Middleware has put the Loaders struct into the context already.
+func Get(ctx context.Context) *Loaders {
+	return ctx.Value(ctxKey{}).(*Loaders)
+}
+
+// Loaders provide access for loading various objects from the underlying object storage while batching concurrent requests and caching responses.
 type Loaders struct {
 	User *dataloadgen.Loader[string, *model.User]
 }
@@ -24,28 +30,24 @@ func Middleware(userStorage *storage.UserStorage, next http.Handler) http.Handle
 	})
 }
 
-// Get returns the dataloader for a given context
-func Get(ctx context.Context) *Loaders {
-	return ctx.Value(ctxKey{}).(*Loaders)
-}
-
 type ctxKey struct{}
 
+// newLoaders creates the Loaders struct
 func newLoaders(userStorage *storage.UserStorage) *Loaders {
-	userFetcher := &userFetcher{
-		userStorage: userStorage,
-	}
+	userFetcher := userFetcher{userStorage: userStorage}
 	loaders := &Loaders{
-		User: dataloadgen.NewLoader(userFetcher.fetchUser),
+		User: dataloadgen.NewLoader(userFetcher.fetchUsers),
 	}
 	return loaders
 }
 
+// userFetcher is used to give the fetchUsers function access to the underlying storage system and can be used to group multiple related fetch functions with similar storage system access patterns.
 type userFetcher struct {
 	userStorage *storage.UserStorage
 }
 
-func (u *userFetcher) fetchUser(ctx context.Context, userIDs []string) ([]*model.User, []error) {
+// fetchUsers retrieves multiple users at the same time from the underlying storage system.
+func (u userFetcher) fetchUsers(ctx context.Context, userIDs []string) ([]*model.User, []error) {
 	users, errs := u.userStorage.GetMulti(userIDs)
 	return users, errs
 }
