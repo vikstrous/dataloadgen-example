@@ -3,20 +3,22 @@ package loader
 import (
 	"context"
 	"net/http"
+	"time"
 
 	"github.com/vikstrous/dataloadgen"
 	"github.com/vikstrous/dataloadgen-example/graph/model"
 	"github.com/vikstrous/dataloadgen-example/graph/storage"
 )
 
-// Get returns the Loaders bundle from the context. It must be used only in graphql resolvers where Middleware has put the Loaders struct into the context already.
-func Get(ctx context.Context) *Loaders {
-	return ctx.Value(ctxKey{}).(*Loaders)
-}
+type ctxKey string
 
-// Loaders provide access for loading various objects from the underlying object's storage system while batching concurrent requests and caching responses.
+const (
+	loadersKey = ctxKey("dataloaders")
+)
+
+// Loaders wrap your data loaders to inject via middleware
 type Loaders struct {
-	User *dataloadgen.Loader[string, *model.User]
+	UserLoader *dataloadgen.Loader[string, *model.User]
 }
 
 // Middleware injects data loaders into the context
@@ -24,30 +26,51 @@ func Middleware(userStorage *storage.UserStorage, next http.Handler) http.Handle
 	// return a middleware that injects the loader to the request context
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Note that the loaders are being created per-request. This is important because they contain caching and batching logic that must be request-scoped.
-		loaders := newLoaders(userStorage)
-		r = r.WithContext(context.WithValue(r.Context(), ctxKey{}, loaders))
+		loaders := NewLoaders(userStorage)
+		r = r.WithContext(context.WithValue(r.Context(), loadersKey, loaders))
 		next.ServeHTTP(w, r)
 	})
 }
 
-type ctxKey struct{}
-
-// newLoaders creates the Loaders struct
-func newLoaders(userStorage *storage.UserStorage) *Loaders {
-	userFetcher := userFetcher{userStorage: userStorage}
-	loaders := &Loaders{
-		User: dataloadgen.NewLoader(userFetcher.fetchUsers),
-	}
-	return loaders
+// For returns the dataloader for a given context
+func For(ctx context.Context) *Loaders {
+	return ctx.Value(loadersKey).(*Loaders)
 }
 
-// userFetcher is used to give the fetchUsers function access to the underlying storage system and can be used to group multiple related fetch functions with similar storage system access patterns.
-type userFetcher struct {
+// NewLoaders instantiates data loaders for the middleware
+func NewLoaders(s *storage.UserStorage) *Loaders {
+	// define the data loader
+	ur := &userReader{userStorage: s}
+	return &Loaders{
+		UserLoader: dataloadgen.NewLoader(ur.getUsers, dataloadgen.WithWait(time.Millisecond)),
+	}
+}
+
+// userReader is used to give the getUsers function access to the underlying storage system and can be used to group multiple related fetch functions with similar storage system access patterns.
+type userReader struct {
 	userStorage *storage.UserStorage
 }
 
-// fetchUsers retrieves multiple users at the same time from the underlying storage system.
-func (u userFetcher) fetchUsers(ctx context.Context, userIDs []string) ([]*model.User, []error) {
+// getUsers retrieves multiple users at the same time from the underlying storage system.
+func (u userReader) getUsers(ctx context.Context, userIDs []string) ([]*model.User, []error) {
 	users, errs := u.userStorage.GetMulti(userIDs)
 	return users, errs
+}
+
+// GetUser returns single user by id efficiently
+func GetUser(ctx context.Context, userID string) (*model.User, error) {
+	loaders := For(ctx)
+	return loaders.UserLoader.Load(ctx, userID)
+}
+
+// PrimeUser primes the user loader cache
+func PrimeUser(ctx context.Context, user *model.User) bool {
+	loaders := For(ctx)
+	return loaders.UserLoader.Prime(user.ID, user)
+}
+
+// GetUsers returns many users by ids efficiently
+func GetUsers(ctx context.Context, userIDs []string) ([]*model.User, error) {
+	loaders := For(ctx)
+	return loaders.UserLoader.LoadAll(ctx, userIDs)
 }

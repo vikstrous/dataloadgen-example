@@ -23,7 +23,7 @@ func (r *mutationResolver) CreateTodo(ctx context.Context, input model.NewTodo) 
 	}
 	// Since we already fetched the user, priming the cache is a good idea
 	// It removes the need for refetching by todoResolver.User later when executing the rest of the query
-	loader.Get(ctx).User.Prime(user.ID, &user)
+	loader.PrimeUser(ctx, &user)
 	id := strconv.Itoa(rand.Int())
 	t := model.Todo{
 		ID:     id,
@@ -48,7 +48,7 @@ func (r *queryResolver) Todos(ctx context.Context) ([]*model.Todo, error) {
 // User is the resolver for the user field.
 // This is a root level resolver and it SHOULD NOT use the storage system directly. This can be called multiple times in parallel and/or on the same keys multiple times. That's why it benefits from using a data loader.
 func (r *todoResolver) User(ctx context.Context, obj *model.Todo) (*model.User, error) {
-	user, err := loader.Get(ctx).User.Load(ctx, obj.UserID)
+	user, err := loader.GetUser(ctx, obj.UserID)
 	if err != nil {
 		return nil, err
 	}
