@@ -16,9 +16,29 @@ const (
 	loadersKey = ctxKey("dataloaders")
 )
 
+// userReader is used to give the getUsers function access to the underlying storage system and can be used to group multiple related fetch functions with similar storage system access patterns.
+type userReader struct {
+	userStorage *storage.UserStorage
+}
+
+// getUsers retrieves multiple users at the same time from the underlying storage system.
+func (u userReader) getUsers(ctx context.Context, userIDs []string) ([]*model.User, []error) {
+	users, errs := u.userStorage.GetMulti(userIDs)
+	return users, errs
+}
+
 // Loaders wrap your data loaders to inject via middleware
 type Loaders struct {
 	UserLoader *dataloadgen.Loader[string, *model.User]
+}
+
+// NewLoaders instantiates data loaders for the middleware
+func NewLoaders(s *storage.UserStorage) *Loaders {
+	// define the data loader
+	ur := &userReader{userStorage: s}
+	return &Loaders{
+		UserLoader: dataloadgen.NewLoader(ur.getUsers, dataloadgen.WithWait(time.Millisecond)),
+	}
 }
 
 // Middleware injects data loaders into the context
@@ -35,26 +55,6 @@ func Middleware(userStorage *storage.UserStorage, next http.Handler) http.Handle
 // For returns the dataloader for a given context
 func For(ctx context.Context) *Loaders {
 	return ctx.Value(loadersKey).(*Loaders)
-}
-
-// NewLoaders instantiates data loaders for the middleware
-func NewLoaders(s *storage.UserStorage) *Loaders {
-	// define the data loader
-	ur := &userReader{userStorage: s}
-	return &Loaders{
-		UserLoader: dataloadgen.NewLoader(ur.getUsers, dataloadgen.WithWait(time.Millisecond)),
-	}
-}
-
-// userReader is used to give the getUsers function access to the underlying storage system and can be used to group multiple related fetch functions with similar storage system access patterns.
-type userReader struct {
-	userStorage *storage.UserStorage
-}
-
-// getUsers retrieves multiple users at the same time from the underlying storage system.
-func (u userReader) getUsers(ctx context.Context, userIDs []string) ([]*model.User, []error) {
-	users, errs := u.userStorage.GetMulti(userIDs)
-	return users, errs
 }
 
 // GetUser returns single user by id efficiently
