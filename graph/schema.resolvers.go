@@ -46,7 +46,7 @@ func (r *queryResolver) Todos(ctx context.Context) ([]*model.Todo, error) {
 }
 
 // User is the resolver for the user field.
-// This is a root level resolver and it SHOULD NOT use the storage system directly. This can be called multiple times in parallel and/or on the same keys multiple times. That's why it benefits from using a data loader.
+// This is a not a root level resolver so it SHOULD NOT use the storage system directly. This can be called multiple times in parallel and/or on the same keys multiple times. That's why it benefits from using a data loader.
 func (r *todoResolver) User(ctx context.Context, obj *model.Todo) (*model.User, error) {
 	user, err := loader.GetUser(ctx, obj.UserID)
 	if err != nil {
